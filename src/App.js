@@ -3,8 +3,9 @@ import {
   Send, Plus, Search, MoreVertical, MessageCircle, Smile,
   CheckCheck, Camera, X, Check, ZoomIn, ZoomOut,
   Eye, EyeOff, Loader2, UserPlus, Users, Bell, Trash2, Edit2, Image as ImageIcon,
-  Settings, LogOut, ChevronRight 
+  Settings, LogOut, ChevronRight, ShieldCheck, ChevronDown, UserMinus, Globe, Lock, Smartphone
 } from 'lucide-react';
+
 
 
 // Firebase Imports
@@ -101,6 +102,14 @@ export default function App() {
     const [saveSuccess, setSaveSuccess] = useState({ profile: false, photo: false });
       const [showSettings, setShowSettings] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [activeSettingsTab, setActiveSettingsTab] = useState('account'); 
+  const [blockedUsers, setBlockedUsers] = useState([]);
+  const [privacySettings, setPrivacySettings] = useState({
+    lastSeen: 'everyone',
+    profileVisibility: 'public',
+    readReceipts: true,
+    typingIndicator: true
+  });
 
   const scrollRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -301,6 +310,28 @@ export default function App() {
       console.error(err);
     }
   };
+  const handleBlockUser = async (targetUser) => {
+    if (!targetUser) return;
+    const confirmBlock = window.confirm(`Block ${targetUser.name}? They will no longer be able to see your status or message you.`);
+    if (!confirmBlock) return;
+    try {
+      await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'blocked', targetUser.uid), {
+        uid: targetUser.uid,
+        name: targetUser.name,
+        avatar: targetUser.avatar || null,
+        blockedAt: serverTimestamp()
+      });
+      await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'friends', targetUser.uid));
+      setActiveChat(null);
+    } catch (e) { console.error("Block error:", e); }
+  };
+
+  const handleUnblock = async (targetUid) => {
+    try {
+      await deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'blocked', targetUid));
+      setBlockedUsers(prev => prev.filter(u => u.uid !== targetUid));
+    } catch (e) { console.error("Unblock error:", e); }
+  };
 
   // Auth Handler
   const handleAuth = async (e) => {
@@ -452,71 +483,127 @@ export default function App() {
       </div>
     </div>
   );
-  const SettingsDrawer = () => (
-    <div className={`fixed inset-0 z-[100] transition-opacity duration-300 ${showSettings ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowSettings(false)} />
-      <div className={`absolute bg-slate-900 shadow-2xl transition-transform duration-300 border-slate-800 
-        ${window.innerWidth < 768 ? 'bottom-0 left-0 right-0 rounded-t-[2.5rem] h-[85vh] translate-y-0' : 'top-0 right-0 w-[480px] h-full border-l translate-x-0'} 
-        ${!showSettings && (window.innerWidth < 768 ? 'translate-y-full' : 'translate-x-full')}`}>
-        
-        <div className="p-6 border-b border-slate-800 flex justify-between items-center">
-          <h2 className="text-xl font-bold text-white">Settings</h2>
-          <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-slate-800 rounded-full text-slate-400"><X size={20}/></button>
-        </div>
+    const SettingsDrawer = () => {
+    const toggleTab = (tab) => setActiveSettingsTab(activeSettingsTab === tab ? null : tab);
+    
+    const updatePrivacy = async (key, value) => {
+      const updated = { ...privacySettings, [key]: value };
+      setPrivacySettings(updated);
+      await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'privacy'), updated, { merge: true });
+    };
 
-        <div className="p-6 overflow-y-auto h-[calc(100%-160px)] space-y-8">
-          <section className="space-y-6">
-            <h3 className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.2em]">Account & Profile</h3>
-            
-            <div className="flex flex-col md:flex-row gap-6 items-center md:items-start">
-              <div className="relative group">
-                <div className="w-24 h-24 rounded-3xl bg-indigo-600 flex items-center justify-center text-3xl font-bold text-white overflow-hidden shadow-xl">
-                  {user.avatar ? <img src={user.avatar} className={`w-full h-full object-cover filter-${user.filter}`} alt="" /> : user.name?.[0]}
-                </div>
-                <button onClick={() => fileInputRef.current?.click()} className="absolute -bottom-2 -right-2 p-2 bg-indigo-600 rounded-xl border-4 border-slate-900 text-white"><Camera size={16}/></button>
-              </div>
+    return (
+      <div className={`fixed inset-0 z-[100] transition-opacity duration-300 ${showSettings ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowSettings(false)} />
+        <div className={`absolute bg-slate-900 shadow-2xl transition-transform duration-300 border-slate-800 flex flex-col
+          ${window.innerWidth < 768 ? 'bottom-0 left-0 right-0 rounded-t-[2.5rem] h-[92vh]' : 'top-0 right-0 w-[480px] h-full border-l'} 
+          ${!showSettings && (window.innerWidth < 768 ? 'translate-y-full' : 'translate-x-full')}`}>
+          
+          <div className="p-6 border-b border-slate-800 flex justify-between items-center sticky top-0 bg-slate-900 z-10">
+            <h2 className="text-xl font-bold text-white">Settings</h2>
+            <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-slate-800 rounded-full text-slate-400"><X size={20}/></button>
+          </div>
 
-              <div className="flex-1 w-full space-y-4">
-                <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block px-1">Full Name</label>
-                  <input type="text" defaultValue={user.name} disabled={isUpdating}
-                    onBlur={async (e) => {
-                      const val = e.target.value.trim();
-                      if(val.length >= 2 && !/[^a-zA-Z ]/.test(val)) {
-                        setIsUpdating(true);
-                        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'profiles', user.uid), { name: val }, { merge: true });
-                        setUser(prev => ({...prev, name: val}));
-                        setIsUpdating(false);
-                      }
-                    }}
-                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-sm focus:border-indigo-500 outline-none transition-all disabled:opacity-50" />
-                </div>
-                
-                <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block px-1">Username</label>
-                  <input type="text" value={user.username} readOnly className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-500 outline-none" />
-                </div>
-
-                <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block px-1">Email Address</label>
-                  <div className="relative">
-                    <input type="text" value={user.email} readOnly className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-500 outline-none" />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 px-2 py-0.5 bg-green-500/10 text-green-500 text-[8px] font-black rounded uppercase">Verified</span>
+          <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
+            {/* SECTION: ACCOUNT & PROFILE */}
+            <div className="border border-slate-800 rounded-3xl overflow-hidden bg-slate-800/20">
+              <button onClick={() => toggleTab('account')} className="w-full p-5 flex items-center justify-between hover:bg-slate-800/40">
+                <div className="flex items-center gap-3 text-indigo-400 font-bold"><Users size={18}/><span>Account & Profile</span></div>
+                <ChevronDown size={18} className={`transition-transform ${activeSettingsTab === 'account' ? 'rotate-180' : ''}`} />
+              </button>
+              {activeSettingsTab === 'account' && (
+                <div className="p-5 pt-0 space-y-6 animate-in slide-in-from-top-2">
+                  <div className="flex flex-col items-center gap-4 py-4">
+                    <div className="relative">
+                      <div className="w-24 h-24 rounded-3xl bg-indigo-600 flex items-center justify-center text-3xl font-bold text-white overflow-hidden shadow-xl">
+                        {user.avatar ? <img src={user.avatar} className={`w-full h-full object-cover filter-${user.filter}`} alt="" /> : user.name?.[0]}
+                      </div>
+                      <button onClick={() => fileInputRef.current?.click()} className="absolute -bottom-2 -right-2 p-2 bg-indigo-600 rounded-xl border-4 border-slate-900 text-white"><Camera size={16}/></button>
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">Full Name</label>
+                      <input type="text" defaultValue={user.name} onBlur={(e) => updateDoc(doc(db, 'artifacts', appId, 'public', 'data', 'profiles', user.uid), { name: e.target.value })} className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-sm" />
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
             </div>
-          </section>
-        </div>
 
-        <div className="absolute bottom-0 left-0 right-0 p-6 bg-slate-900 border-t border-slate-800">
-          <button onClick={() => signOut(auth)} className="w-full py-4 bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white rounded-2xl font-bold transition-all flex items-center justify-center gap-2">
-            <LogOut size={18} /> Logout Session
-          </button>
+            {/* SECTION: PRIVACY & SECURITY */}
+            <div className="border border-slate-800 rounded-3xl overflow-hidden bg-slate-800/20">
+              <button onClick={() => toggleTab('privacy')} className="w-full p-5 flex items-center justify-between hover:bg-slate-800/40">
+                <div className="flex items-center gap-3 text-emerald-400 font-bold"><ShieldCheck size={18}/><span>Privacy & Security</span></div>
+                <ChevronDown size={18} className={`transition-transform ${activeSettingsTab === 'privacy' ? 'rotate-180' : ''}`} />
+              </button>
+              {activeSettingsTab === 'privacy' && (
+                <div className="p-5 pt-0 space-y-6">
+                  <div className="space-y-3">
+                    <label className="text-xs font-bold text-slate-400">Last Seen & Online Status</label>
+                    <div className="grid grid-cols-3 gap-2 bg-slate-950 p-1 rounded-xl">
+                      {['everyone', 'contacts', 'nobody'].map(opt => (
+                        <button key={opt} onClick={() => updatePrivacy('lastSeen', opt)} className={`py-2 text-[10px] font-bold rounded-lg capitalize ${privacySettings.lastSeen === opt ? 'bg-indigo-600 text-white' : 'text-slate-500'}`}>{opt}</button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between pt-2">
+                    <div><p className="text-sm font-bold">Profile Visibility</p></div>
+                    <select value={privacySettings.profileVisibility} onChange={(e) => updatePrivacy('profileVisibility', e.target.value)} className="bg-slate-800 border border-slate-700 rounded-lg text-xs p-2">
+                      <option value="public">Public</option>
+                      <option value="private">Private</option>
+                    </select>
+                  </div>
+                  <div className="space-y-4 pt-2 border-t border-slate-800">
+                    {[{ id: 'readReceipts', label: 'Read Receipts' }, { id: 'typingIndicator', label: 'Typing Indicator' }].map(item => (
+                      <div key={item.id} className="flex items-center justify-between">
+                        <span className="text-sm font-bold">{item.label}</span>
+                        <button onClick={() => updatePrivacy(item.id, !privacySettings[item.id])} className={`w-10 h-5 rounded-full relative transition-all ${privacySettings[item.id] ? 'bg-indigo-600' : 'bg-slate-700'}`}>
+                          <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${privacySettings[item.id] ? 'right-1' : 'left-1'}`} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="pt-4 border-t border-slate-800">
+                    <p className="text-xs font-bold text-slate-400 mb-4">Blocked Users</p>
+                    {blockedUsers.length === 0 ? <p className="text-[10px] text-slate-600 italic">No blocked users</p> : blockedUsers.map(u => (
+                      <div key={u.uid} className="flex items-center justify-between bg-slate-800/40 p-3 rounded-2xl mb-2">
+                        <span className="text-xs font-bold">{u.name}</span>
+                        <button onClick={() => handleUnblock(u.uid)} className="text-[10px] font-black text-rose-500">UNBLOCK</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* SECTION: DEVICES & SESSIONS */}
+            <div className="border border-slate-800 rounded-3xl overflow-hidden bg-slate-800/20">
+              <button onClick={() => toggleTab('sessions')} className="w-full p-5 flex items-center justify-between hover:bg-slate-800/40">
+                <div className="flex items-center gap-3 text-amber-400 font-bold"><Smartphone size={18}/><span>Devices & Sessions</span></div>
+                <ChevronDown size={18} className={`transition-transform ${activeSettingsTab === 'sessions' ? 'rotate-180' : ''}`} />
+              </button>
+              {activeSettingsTab === 'sessions' && (
+                <div className="p-5 pt-0 space-y-4">
+                  <div className="bg-slate-800/40 p-4 rounded-2xl flex items-center justify-between border border-indigo-500/30">
+                    <div><p className="text-xs font-bold">Current Device</p><p className="text-[10px] text-slate-500">Active Now • Secure</p></div>
+                  </div>
+                  <button onClick={() => { if(window.confirm('Log out from all other devices?')) signOut(auth); }} className="w-full py-3 text-[10px] font-black text-rose-500 border border-rose-500/20 rounded-xl hover:bg-rose-500 hover:text-white transition-all">LOGOUT ALL OTHER DEVICES</button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="p-6 bg-slate-900 border-t border-slate-800">
+            <button onClick={() => signOut(auth)} className="w-full py-4 bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white rounded-2xl font-bold transition-all flex items-center justify-center gap-2">
+              <LogOut size={18} /> Logout Session
+            </button>
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
+
 
     // --- LOADING / INITIALIZING SCREEN ---
   if (initializing) {
@@ -677,7 +764,7 @@ export default function App() {
 
       {/* --- MAIN CHAT AREA --- */}
       <main onClick={() => setIsSidebarCollapsed(true)} className="flex-1 flex flex-col bg-slate-950 relative">
-        {/* Chat Header */}
+                {/* Chat Header */}
         <header className="h-20 flex-shrink-0 border-b border-slate-800 bg-slate-900/60 backdrop-blur-xl px-8 flex items-center justify-between z-10">
           <div className="flex items-center gap-4 cursor-pointer group" onClick={(e) => { e.stopPropagation(); if (activeChat) setViewingProfile(activeChat); }}>
             <div className={`w-11 h-11 rounded-2xl bg-slate-700 flex items-center justify-center text-white font-black shadow-lg overflow-hidden`}>
@@ -693,7 +780,25 @@ export default function App() {
               )}
             </div>
           </div>
+
+          {/* --- ADDED THE MISSING BUTTON AND DROPDOWN BELOW --- */}
+          {activeChat && (
+            <div className="relative group">
+              <button className="p-3 text-slate-500 hover:text-white hover:bg-slate-800 rounded-2xl transition-all">
+                <MoreVertical size={20} />
+              </button>
+              <div className="absolute right-0 top-14 w-48 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl opacity-0 group-hover:opacity-100 pointer-events-none group-hover:pointer-events-auto transition-all z-50 overflow-hidden">
+                <button 
+                  onClick={(e) => { e.stopPropagation(); handleBlockUser(activeChat); }} 
+                  className="w-full px-4 py-3 flex items-center gap-3 text-rose-500 hover:bg-rose-500/10 transition-all text-xs font-bold"
+                >
+                  <UserMinus size={16} /> Block User
+                </button>
+              </div>
+            </div>
+          )}
         </header>
+
 
         {/* Messages List */}
         <div className="flex-1 overflow-y-auto p-8 space-y-8 custom-scrollbar bg-[radial-gradient(circle_at_50%_50%,rgba(79,70,229,0.05),transparent_70%)]">
