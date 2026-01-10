@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+  import React, { useState, useEffect, useRef } from 'react';
 import { 
   Send, Plus, Search, MoreVertical, MessageCircle, Smile,
   CheckCheck, Camera, X, Check, ZoomIn, ZoomOut,
@@ -76,7 +76,10 @@ export default function App() {
   const [sidebarTab, setSidebarTab] = useState('chats'); // 'chats' or 'requests'
   const [activeChat, setActiveChat] = useState(null);
   const [messages, setMessages] = useState([]);
-  
+    // Settings UI State
+  const [showSettings, setShowSettings] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
   // Friend System State
   const [friends, setFriends] = useState([]);
   const [friendRequests, setFriendRequests] = useState([]);
@@ -428,9 +431,16 @@ export default function App() {
   };
 
   // --- RENDER HELPERS ---
-  const Modal = ({ title, onClose, children }) => (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="bg-slate-900 border border-slate-700 w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[95vh]">
+    const Modal = ({ title, onClose, children }) => (
+    <div 
+      onClick={onClose} 
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-in fade-in duration-200"
+    >
+      <div 
+        onClick={(e) => e.stopPropagation()} 
+        className="bg-slate-900 border border-slate-700 w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[95vh]"
+      >
+
         <div className="p-5 border-b border-slate-800 flex justify-between items-center">
           <h3 className="font-bold text-lg text-white">{title}</h3>
           <button onClick={onClose} className="p-2 hover:bg-slate-800 rounded-full transition-colors text-slate-400">
@@ -581,12 +591,18 @@ export default function App() {
           })}
         </div>
 
-        {!isSidebarCollapsed && (
-          <div className="p-4 border-t border-slate-800">
-            <button onClick={() => signOut(auth)} className="w-full py-3 bg-slate-800 hover:bg-rose-900/20 hover:text-rose-500 rounded-xl text-xs font-bold transition-all">Sign Out</button>
+                {!isSidebarCollapsed && (
+          <div className="p-4 border-t border-slate-800 bg-slate-900/50">
+            <button 
+              onClick={() => setShowSettings(true)} 
+              className="w-full flex items-center justify-center gap-2 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg"
+            >
+              <Edit2 size={14} /> Account Settings
+            </button>
           </div>
         )}
       </aside>
+
 
       {/* --- MAIN CHAT AREA --- */}
       <main onClick={() => setIsSidebarCollapsed(true)} className="flex-1 flex flex-col bg-slate-950 relative">
@@ -729,11 +745,23 @@ export default function App() {
               <div className="space-y-6">
                 <div><label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-2 px-1">Display Name</label><input type="text" value={user.name || ''} readOnly className="w-full bg-slate-800 border-2 border-slate-700 rounded-2xl px-5 py-4 opacity-60" /></div>
                 <div><label className="text-[10px] font-black text-slate-500 uppercase tracking-widest block mb-2 px-1">Bio</label><textarea value={user.bio || ''} onChange={e => setUser({...user, bio: e.target.value})} rows={3} className="w-full bg-slate-800 border-2 border-slate-700 rounded-2xl px-5 py-4 focus:border-indigo-600 outline-none resize-none" /></div>
-                <button onClick={async () => {
-                    await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'info'), { bio: user.bio }, { merge: true });
-                    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'profiles', user.uid), { bio: user.bio }, { merge: true });
-                    // alert('Bio updated!'); 
-                }} className="w-full bg-slate-800 hover:bg-indigo-600 py-4 rounded-2xl font-bold transition-all">Save Changes</button>
+                <button 
+  onClick={async (e) => {
+    const btn = e.currentTarget;
+    const originalText = btn.innerText;
+    btn.innerText = "Saving...";
+    await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'info'), { bio: user.bio }, { merge: true });
+    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'profiles', user.uid), { bio: user.bio }, { merge: true });
+    btn.innerText = "Done!";
+    setTimeout(() => {
+      setViewingProfile(null);
+    }, 500);
+  }} 
+  className="w-full bg-indigo-600 hover:bg-indigo-500 py-4 rounded-2xl font-bold transition-all text-white"
+>
+  Save Changes
+</button>
+
               </div>
             </div>
           ) : (
@@ -768,7 +796,22 @@ export default function App() {
                 <button key={f} onClick={() => setPhotoFilter(f)} className={`flex-shrink-0 px-5 py-3 rounded-2xl text-[10px] font-black uppercase transition-all ${photoFilter === f ? 'bg-indigo-600 text-white' : 'bg-slate-800 text-slate-500'}`}>{f}</button>
               ))}
             </div>
-            <button onClick={saveProfilePhoto} className="w-full py-4 bg-indigo-600 rounded-2xl font-bold flex items-center justify-center gap-2"><Check size={22} /> Apply Photo</button>
+              <button 
+  onClick={async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    btn.innerText = "Processing...";
+    await saveProfilePhoto();
+    btn.innerText = "Applied!";
+    setTimeout(() => {
+      setEditingPhoto(null);
+    }, 600);
+  }} 
+  className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 rounded-2xl font-bold flex items-center justify-center gap-2 text-white"
+>
+  <Check size={22} /> Apply Photo
+</button>
+
           </div>
         </Modal>
       )}
@@ -778,7 +821,125 @@ export default function App() {
         .filter-grayscale { filter: var(--tw-filter-grayscale); } .filter-sepia { filter: var(--tw-filter-sepia); } .filter-invert { filter: var(--tw-filter-invert); }
         .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+              {/* --- ACCOUNT & PROFILE SETTINGS DRAWER --- */}
+      {showSettings && (
+        <div className="fixed inset-0 z-[100] flex justify-end">
+          {/* Backdrop */}
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowSettings(false)} />
+          
+          {/* Drawer Container */}
+          <div className="relative w-full max-w-[480px] h-full bg-slate-900 border-l border-slate-800 shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+            
+            {/* Header */}
+            <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/50 sticky top-0 z-10">
+              <h2 className="text-xl font-black text-white tracking-tight">Account & Profile</h2>
+              <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-slate-800 rounded-full text-slate-400"><X size={20} /></button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-8">
+              {/* Profile Photo Section */}
+              <div className="flex flex-col items-center gap-4">
+                <div className="relative group">
+                  <div className="w-32 h-32 rounded-[2rem] bg-indigo-600 flex items-center justify-center text-4xl font-bold text-white overflow-hidden shadow-2xl">
+                    {user.avatar ? <img src={user.avatar} className={`w-full h-full object-cover filter-${user.filter}`} alt="Profile" /> : (user.name?.[0] || 'U')}
+                  </div>
+                  <button 
+                    onClick={() => fileInputRef.current?.click()} 
+                    className="absolute -bottom-2 -right-2 p-3 bg-indigo-600 border-4 border-slate-900 rounded-2xl text-white shadow-xl hover:scale-110 transition-transform"
+                  >
+                    <Camera size={18} />
+                  </button>
+                </div>
+                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Change Avatar</p>
+              </div>
+
+              {/* Editable Fields */}
+              <div className="space-y-6">
+                {/* Full Name */}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-1">Display Name</label>
+                  <input 
+                    type="text" 
+                    defaultValue={user.name} 
+                    disabled={isSaving}
+                    onBlur={async (e) => {
+                      const newName = e.target.value;
+                      if (newName.length < 3) return; // Basic validation
+                      setIsSaving(true);
+                      await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'profiles', user.uid), { name: newName }, { merge: true });
+                      setIsSaving(false);
+                    }}
+                    className="w-full bg-slate-800/50 border border-slate-700 rounded-2xl px-5 py-4 focus:border-indigo-500 outline-none transition-all text-white" 
+                  />
+                </div>
+
+                {/* Username (Read Only) */}
+                <div className="space-y-2 opacity-60">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-1">Username / ID</label>
+                  <div className="w-full bg-slate-800 border border-slate-700 rounded-2xl px-5 py-4 text-slate-400 font-mono text-sm">
+                    {user.username}
+                  </div>
+                </div>
+
+                {/* Email (Sensitive - Re-auth required) */}
+                <div className="space-y-2">
+                  <div className="flex justify-between px-1">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Email Address</label>
+                    <span className="text-[9px] text-green-500 font-bold uppercase tracking-widest flex items-center gap-1"><Check size={10}/> Verified</span>
+                  </div>
+                  <div className="relative">
+                    <input 
+                      type="email" 
+                      value={user.email} 
+                      readOnly 
+                      className="w-full bg-slate-800/30 border border-slate-700 rounded-2xl px-5 py-4 text-slate-500 cursor-not-allowed" 
+                    />
+                    <button 
+                      onClick={() => alert("Re-authentication required to change email.")}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-indigo-400 hover:text-white"
+                    >
+                      Change
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Status Message (Success/Error) */}
+              {isSaving && (
+                <div className="flex items-center justify-center gap-2 text-indigo-400 text-xs font-bold animate-pulse">
+                  <Loader2 size={14} className="animate-spin" /> Saving changes...
+                </div>
+              )}
+            </div>
+
+                        {/* Logout pinned to bottom */}
+            <div className="p-6 border-t border-slate-800 bg-slate-900/80">
+              <button 
+                onClick={() => {
+                  if(window.confirm("Are you sure you want to logout?")) {
+                    signOut(auth);
+                    setShowSettings(false);
+                  }
+                }} 
+                className="w-full py-4 bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white border border-rose-500/20 rounded-2xl font-bold transition-all flex items-center justify-center gap-2"
+              >
+                <Trash2 size={18} /> Logout Session
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* This Style tag MUST be inside the last div */}
+      <style>{`
+        :root { --tw-filter-grayscale: grayscale(1); --tw-filter-sepia: sepia(0.8) contrast(1.2); --tw-filter-invert: invert(0.9); }
+        .filter-grayscale { filter: var(--tw-filter-grayscale); } 
+        .filter-sepia { filter: var(--tw-filter-sepia); } 
+        .filter-invert { filter: var(--tw-filter-invert); }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
       `}</style>
-    </div>
+
+    </div> 
   );
 }
