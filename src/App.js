@@ -62,6 +62,7 @@ const appId = typeof __app_id !== 'undefined' ? __app_id : 'private-circle-messe
 export default function App() {
   // --- STATE ---
   const [user, setUser] = useState(null);
+  const [initializing, setInitializing] = useState(true);
   const [authMode, setAuthMode] = useState('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -139,10 +140,12 @@ export default function App() {
           console.error("Error fetching user profile:", e);
           setUser(firebaseUser);
         }
-      } else {
+            } else {
         setUser(null);
       }
+      setInitializing(false); // Add this line to stop the loading state
     });
+
     return () => unsubscribe();
   }, []);
 
@@ -446,7 +449,19 @@ export default function App() {
     </div>
   );
 
-  // --- LOGIN SCREEN ---
+    // --- LOADING / INITIALIZING SCREEN ---
+  if (initializing) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center">
+        <div className="bg-indigo-600 p-5 rounded-3xl mb-5 animate-pulse">
+          <MessageCircle className="text-white w-10 h-10" />
+        </div>
+        <p className="text-slate-500 font-bold tracking-widest animate-pulse">LOADING SECURE CIRCLE...</p>
+      </div>
+    );
+  }
+
+  // --- LOGIN SCREEN --- 
   if (!user) {
     return (
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 overflow-y-auto font-sans">
