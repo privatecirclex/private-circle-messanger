@@ -728,7 +728,7 @@ export default function App() {
         )}
       </main>
 
-      {/* --- MODALS (PROFILE & EDIT) --- */}
+
       {viewingProfile && (
         <Modal title={viewingProfile === 'me' ? 'My Profile' : 'Contact Info'} onClose={() => setViewingProfile(null)}>
           {viewingProfile === 'me' ? (
@@ -776,7 +776,7 @@ export default function App() {
         </Modal>
       )}
 
-      {/* PHOTO EDITOR */}
+      
       {editingPhoto && (
         <Modal title="Edit Photo" onClose={() => setEditingPhoto(null)}>
           <div className="space-y-8">
@@ -821,23 +821,23 @@ export default function App() {
         .filter-grayscale { filter: var(--tw-filter-grayscale); } .filter-sepia { filter: var(--tw-filter-sepia); } .filter-invert { filter: var(--tw-filter-invert); }
         .custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
-              {/* --- ACCOUNT & PROFILE SETTINGS DRAWER --- */}
+              
       {showSettings && (
         <div className="fixed inset-0 z-[100] flex justify-end">
-          {/* Backdrop */}
+          
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowSettings(false)} />
           
-          {/* Drawer Container */}
+
           <div className="relative w-full max-w-[480px] h-full bg-slate-900 border-l border-slate-800 shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
             
-            {/* Header */}
+            
             <div className="p-6 border-b border-slate-800 flex justify-between items-center bg-slate-900/50 sticky top-0 z-10">
               <h2 className="text-xl font-black text-white tracking-tight">Account & Profile</h2>
               <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-slate-800 rounded-full text-slate-400"><X size={20} /></button>
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 space-y-8">
-              {/* Profile Photo Section */}
+              
               <div className="flex flex-col items-center gap-4">
                 <div className="relative group">
                   <div className="w-32 h-32 rounded-[2rem] bg-indigo-600 flex items-center justify-center text-4xl font-bold text-white overflow-hidden shadow-2xl">
@@ -853,9 +853,9 @@ export default function App() {
                 <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Change Avatar</p>
               </div>
 
-              {/* Editable Fields */}
+              
               <div className="space-y-6">
-                {/* Full Name */}
+                
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-1">Display Name</label>
                   <input 
@@ -873,7 +873,7 @@ export default function App() {
                   />
                 </div>
 
-                {/* Username (Read Only) */}
+                
                 <div className="space-y-2 opacity-60">
                   <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-1">Username / ID</label>
                   <div className="w-full bg-slate-800 border border-slate-700 rounded-2xl px-5 py-4 text-slate-400 font-mono text-sm">
@@ -881,7 +881,7 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Email (Sensitive - Re-auth required) */}
+                
                 <div className="space-y-2">
                   <div className="flex justify-between px-1">
                     <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Email Address</label>
@@ -904,7 +904,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Status Message (Success/Error) */}
+              
               {isSaving && (
                 <div className="flex items-center justify-center gap-2 text-indigo-400 text-xs font-bold animate-pulse">
                   <Loader2 size={14} className="animate-spin" /> Saving changes...
@@ -912,7 +912,7 @@ export default function App() {
               )}
             </div>
 
-                        {/* Logout pinned to bottom */}
+                        
             <div className="p-6 border-t border-slate-800 bg-slate-900/80">
               <button 
                 onClick={() => {
@@ -930,7 +930,7 @@ export default function App() {
         </div>
       )}
 
-      {/* This Style tag MUST be inside the last div */}
+      
       <style>{`
         :root { --tw-filter-grayscale: grayscale(1); --tw-filter-sepia: sepia(0.8) contrast(1.2); --tw-filter-invert: invert(0.9); }
         .filter-grayscale { filter: var(--tw-filter-grayscale); } 
