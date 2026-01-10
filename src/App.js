@@ -9,7 +9,7 @@ import {
 import { initializeApp } from 'firebase/app';
 import { 
   getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, 
-  onAuthStateChanged, signOut, signInWithCustomToken
+  onAuthStateChanged, signOut, signInWithCustomToken, signInAnonymously
 } from 'firebase/auth';
 import { 
   getFirestore, collection, addDoc, query, onSnapshot, serverTimestamp, 
@@ -37,13 +37,15 @@ const compressImage = (base64Str, maxWidth = 800, quality = 0.7) => {
       ctx.drawImage(img, 0, 0, width, height);
       resolve(canvas.toDataURL('image/jpeg', quality));
     };
+    img.onerror = (err) => resolve(base64Str); // Fallback
   });
 };
 
 // --- CONFIGURATION ---
 const EMOJIS = ['😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '😊', '😇', '🥰', '😍', '🤩', '😘', '😗', '😋', '😛', '😝', '😜', '🤪', '🤨', '🧐', '🤓', '😎', '🥳', '😏', '😒', '😞', '😔', '😟', '😕', '🙁', '😣', '😖', '😫', '😩', '🥺', '😢', '😭', '😤', '😠', '😡', '🤬', '🤯', '😳', '🥵', '🥶', '😱', '😨', '🤗', '🤔', '🤭', '🤫', '🤥', '😶', '😐', '😑', '😬', '🙄', '😯', '😦', '😧', '😮', '😲', '🥱', '😴', '🤤', '😪', '😵', '🤐', '🥴', '🤢', '🤮', '🤧', '😷', '🤒', '🤕', '🤑', '🤠'];
 
-const firebaseConfig = {
+// Use environment config for stability in preview, fallback to provided values if needed
+const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {
   apiKey: "AIzaSyBaq_rTRyUBChFSaiwjW63gg0XP77mNmEc",
   authDomain: "private-circle-d0359.firebaseapp.com",
   projectId: "private-circle-d0359",
@@ -101,17 +103,39 @@ export default function App() {
   // --- 1. AUTH & USER INIT ---
   useEffect(() => {
     const initAuth = async () => {
-      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-        try { await signInWithCustomToken(auth, __initial_auth_token); } catch (e) {}
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          // If no custom token, we wait for user manual login or existing session
+        }
+      } catch (e) {
+        console.error("Auth init error:", e);
       }
     };
     initAuth();
+    
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        const userDoc = await getDoc(doc(db, 'artifacts', appId, 'users', firebaseUser.uid, 'profile', 'info'));
-        if (userDoc.exists()) {
-          setUser({ ...firebaseUser, ...userDoc.data() });
-        } else {
+        try {
+          // Fetch PRIVATE info first (for self)
+          const userDoc = await getDoc(doc(db, 'artifacts', appId, 'users', firebaseUser.uid, 'profile', 'info'));
+          
+          // Also try to sync with PUBLIC info to ensure consistency
+          const publicDoc = await getDoc(doc(db, 'artifacts', appId, 'public', 'data', 'profiles', firebaseUser.uid));
+          
+          let userData = { ...firebaseUser };
+          if (userDoc.exists()) {
+            userData = { ...userData, ...userDoc.data() };
+          }
+          if (publicDoc.exists()) {
+            // Prioritize public avatar/bio as that's what others see
+            userData = { ...userData, ...publicDoc.data() };
+          }
+          
+          setUser(userData);
+        } catch (e) {
+          console.error("Error fetching user profile:", e);
           setUser(firebaseUser);
         }
       } else {
@@ -130,14 +154,14 @@ export default function App() {
     const unsubFriends = onSnapshot(friendsQuery, (snapshot) => {
       const friendsList = snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
       setFriends(friendsList);
-    });
+    }, (error) => console.error("Friends list error:", error));
 
     // Listen to incoming requests
     const requestsQuery = query(collection(db, 'artifacts', appId, 'users', user.uid, 'requests'));
     const unsubRequests = onSnapshot(requestsQuery, (snapshot) => {
       const reqList = snapshot.docs.map(doc => ({ uid: doc.id, ...doc.data() }));
       setFriendRequests(reqList);
-    });
+    }, (error) => console.error("Requests list error:", error));
 
     return () => {
       unsubFriends();
@@ -145,23 +169,47 @@ export default function App() {
     };
   }, [user]);
 
+  // --- 2.5 LIVE PROFILE SYNC FOR ACTIVE CHAT ---
+  // This fixes the issue where you don't see updated pics/bios of friends
+  useEffect(() => {
+    if (!activeChat || !activeChat.uid) return;
+
+    // Listen to the PUBLIC profile of the person we are chatting with
+    const profileRef = doc(db, 'artifacts', appId, 'public', 'data', 'profiles', activeChat.uid);
+    
+    const unsubProfile = onSnapshot(profileRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const freshData = docSnap.data();
+        
+        // 1. Update the Active Chat view
+        setActiveChat(prev => ({ ...prev, ...freshData }));
+
+        // 2. Also update this friend in the Friends List state so sidebar updates
+        setFriends(prevFriends => 
+          prevFriends.map(f => f.uid === activeChat.uid ? { ...f, ...freshData } : f)
+        );
+      }
+    });
+
+    return () => unsubProfile();
+  }, [activeChat?.uid]);
+
   // --- 3. SEARCH (DISCOVERY) ---
   useEffect(() => {
     if (!searchQuery.trim() || !user) {
       setSearchResults([]);
       return;
     }
-    // Note: In a real app, use Algolia/ElasticSearch. Here we scan profiles (simple but inefficient for huge apps)
     const q = query(collection(db, 'artifacts', appId, 'public', 'data', 'profiles'));
     const unsub = onSnapshot(q, (snapshot) => {
       const results = snapshot.docs
         .map(doc => ({ uid: doc.id, ...doc.data() }))
         .filter(u => 
           u.uid !== user.uid && 
-          (u.name.toLowerCase().includes(searchQuery.toLowerCase()) || u.username.toLowerCase().includes(searchQuery.toLowerCase()))
+          (u.name?.toLowerCase().includes(searchQuery.toLowerCase()) || u.username?.toLowerCase().includes(searchQuery.toLowerCase()))
         );
       setSearchResults(results);
-    });
+    }, (error) => console.error("Search error:", error));
     return () => unsub();
   }, [searchQuery, user]);
 
@@ -194,7 +242,7 @@ export default function App() {
         unreadBatch.forEach(ref => batch.update(ref, { read: true }));
         batch.commit().catch(e => console.error("Read receipt error:", e));
       }
-    }, (error) => console.error("Firestore error:", error));
+    }, (error) => console.error("Messages error:", error));
 
     return () => unsubscribe();
   }, [user, activeChat]);
@@ -220,7 +268,7 @@ export default function App() {
         filter: user.filter || 'none',
         status: 'pending'
       });
-      alert('Request sent!');
+      console.log('Request sent!');
       setSearchQuery('');
     } catch (err) {
       console.error(err);
@@ -288,7 +336,7 @@ export default function App() {
   };
 
   const handleSendMessage = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     if ((!newMessage.trim() && !chatImage) || !activeChat || !user) return;
 
     const chatId = [user.uid, activeChat.uid].sort().join('_');
@@ -330,7 +378,6 @@ export default function App() {
   };
 
   const deleteMessage = async (msgId) => {
-    if (!confirm("Delete this message?")) return;
     const chatId = [user.uid, activeChat.uid].sort().join('_');
     try {
       await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', `messages_${chatId}`, msgId));
@@ -340,8 +387,8 @@ export default function App() {
   const startEditMessage = (msg) => {
     setEditingMessageId(msg.id);
     setNewMessage(msg.text);
-    // Focus input
-    document.querySelector('input[name="chatInput"]')?.focus();
+    // Focus textarea
+    document.querySelector('textarea[name="chatInput"]')?.focus();
   };
 
   // Profile Photo Handlers
@@ -365,10 +412,17 @@ export default function App() {
     const updated = { ...user, avatar: compressed, filter: photoFilter };
     setUser(updated);
     
-    // Save to private and public
-    const dataToSave = { avatar: compressed, filter: photoFilter };
-    await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'info'), dataToSave, { merge: true });
-    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'profiles', user.uid), dataToSave, { merge: true });
+    // Save to private (user settings)
+    await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'info'), updated, { merge: true });
+    
+    // Save to public (discovery & friends viewing)
+    await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'profiles', user.uid), {
+      avatar: compressed,
+      filter: photoFilter,
+      name: user.name,
+      username: user.username,
+      bio: user.bio || ''
+    }, { merge: true });
     
     setEditingPhoto(null);
   };
@@ -633,7 +687,21 @@ export default function App() {
               </div>
 
               <div className="flex-1 relative">
-                <input name="chatInput" type="text" value={newMessage} onChange={(e) => setNewMessage(e.target.value)} onFocus={() => setIsSidebarCollapsed(true)} placeholder="Type a message..." className="w-full bg-slate-900/50 border-2 border-slate-800 rounded-[1.5rem] py-4 px-6 text-sm focus:border-indigo-600 outline-none transition-all pr-14" />
+                {/* REPLACED INPUT WITH TEXTAREA */}
+                <textarea 
+                  name="chatInput"
+                  value={newMessage} 
+                  onChange={(e) => setNewMessage(e.target.value)} 
+                  onFocus={() => setIsSidebarCollapsed(true)} 
+                  onKeyDown={(e) => {
+                    if(e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSendMessage(e);
+                    }
+                  }}
+                  placeholder="Type a message..." 
+                  className="w-full bg-slate-900/50 border-2 border-slate-800 rounded-[1.5rem] py-4 px-6 text-sm focus:border-indigo-600 outline-none transition-all pr-14 resize-none h-14 custom-scrollbar leading-normal" 
+                />
                 <button type="button" onClick={() => setShowEmojiPicker(!showEmojiPicker)} className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-indigo-400"><Smile size={24} /></button>
               </div>
               <button disabled={(!newMessage.trim() && !chatImage)} type="submit" className="p-4 bg-indigo-600 text-white rounded-[1.5rem] hover:bg-indigo-500 disabled:opacity-20 shadow-2xl shadow-indigo-600/40 transition-all active:scale-95">
@@ -664,7 +732,7 @@ export default function App() {
                 <button onClick={async () => {
                     await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'profile', 'info'), { bio: user.bio }, { merge: true });
                     await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'profiles', user.uid), { bio: user.bio }, { merge: true });
-                    alert('Bio updated!');
+                    // alert('Bio updated!'); 
                 }} className="w-full bg-slate-800 hover:bg-indigo-600 py-4 rounded-2xl font-bold transition-all">Save Changes</button>
               </div>
             </div>
