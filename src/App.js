@@ -2,8 +2,10 @@ import React, { useState, useEffect, useRef } from 'react';
 import { 
   Send, Plus, Search, MoreVertical, MessageCircle, Smile,
   CheckCheck, Camera, X, Check, ZoomIn, ZoomOut,
-  Eye, EyeOff, Loader2, UserPlus, Users, Bell, Trash2, Edit2, Image as ImageIcon
+  Eye, EyeOff, Loader2, UserPlus, Users, Bell, Trash2, Edit2, Image as ImageIcon,
+  Settings, LogOut, ChevronRight 
 } from 'lucide-react';
+
 
 // Firebase Imports
 import { initializeApp } from 'firebase/app';
@@ -97,6 +99,8 @@ export default function App() {
   const [photoZoom, setPhotoZoom] = useState(1);
   const [photoPos, setPhotoPos] = useState({ x: 0, y: 0 });
     const [saveSuccess, setSaveSuccess] = useState({ profile: false, photo: false });
+      const [showSettings, setShowSettings] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
 
   const scrollRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -448,6 +452,71 @@ export default function App() {
       </div>
     </div>
   );
+  const SettingsDrawer = () => (
+    <div className={`fixed inset-0 z-[100] transition-opacity duration-300 ${showSettings ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowSettings(false)} />
+      <div className={`absolute bg-slate-900 shadow-2xl transition-transform duration-300 border-slate-800 
+        ${window.innerWidth < 768 ? 'bottom-0 left-0 right-0 rounded-t-[2.5rem] h-[85vh] translate-y-0' : 'top-0 right-0 w-[480px] h-full border-l translate-x-0'} 
+        ${!showSettings && (window.innerWidth < 768 ? 'translate-y-full' : 'translate-x-full')}`}>
+        
+        <div className="p-6 border-b border-slate-800 flex justify-between items-center">
+          <h2 className="text-xl font-bold text-white">Settings</h2>
+          <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-slate-800 rounded-full text-slate-400"><X size={20}/></button>
+        </div>
+
+        <div className="p-6 overflow-y-auto h-[calc(100%-160px)] space-y-8">
+          <section className="space-y-6">
+            <h3 className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.2em]">Account & Profile</h3>
+            
+            <div className="flex flex-col md:flex-row gap-6 items-center md:items-start">
+              <div className="relative group">
+                <div className="w-24 h-24 rounded-3xl bg-indigo-600 flex items-center justify-center text-3xl font-bold text-white overflow-hidden shadow-xl">
+                  {user.avatar ? <img src={user.avatar} className={`w-full h-full object-cover filter-${user.filter}`} alt="" /> : user.name?.[0]}
+                </div>
+                <button onClick={() => fileInputRef.current?.click()} className="absolute -bottom-2 -right-2 p-2 bg-indigo-600 rounded-xl border-4 border-slate-900 text-white"><Camera size={16}/></button>
+              </div>
+
+              <div className="flex-1 w-full space-y-4">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block px-1">Full Name</label>
+                  <input type="text" defaultValue={user.name} disabled={isUpdating}
+                    onBlur={async (e) => {
+                      const val = e.target.value.trim();
+                      if(val.length >= 2 && !/[^a-zA-Z ]/.test(val)) {
+                        setIsUpdating(true);
+                        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'profiles', user.uid), { name: val }, { merge: true });
+                        setUser(prev => ({...prev, name: val}));
+                        setIsUpdating(false);
+                      }
+                    }}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-3 text-sm focus:border-indigo-500 outline-none transition-all disabled:opacity-50" />
+                </div>
+                
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block px-1">Username</label>
+                  <input type="text" value={user.username} readOnly className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-500 outline-none" />
+                </div>
+
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block px-1">Email Address</label>
+                  <div className="relative">
+                    <input type="text" value={user.email} readOnly className="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-500 outline-none" />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 px-2 py-0.5 bg-green-500/10 text-green-500 text-[8px] font-black rounded uppercase">Verified</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div className="absolute bottom-0 left-0 right-0 p-6 bg-slate-900 border-t border-slate-800">
+          <button onClick={() => signOut(auth)} className="w-full py-4 bg-rose-500/10 hover:bg-rose-500 text-rose-500 hover:text-white rounded-2xl font-bold transition-all flex items-center justify-center gap-2">
+            <LogOut size={18} /> Logout Session
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 
     // --- LOADING / INITIALIZING SCREEN ---
   if (initializing) {
@@ -598,11 +667,12 @@ export default function App() {
           })}
         </div>
 
-        {!isSidebarCollapsed && (
-          <div className="p-4 border-t border-slate-800">
-            <button onClick={() => signOut(auth)} className="w-full py-3 bg-slate-800 hover:bg-rose-900/20 hover:text-rose-500 rounded-xl text-xs font-bold transition-all">Sign Out</button>
-          </div>
-        )}
+                <div className={`p-4 border-t border-slate-800 flex ${isSidebarCollapsed ? 'justify-center' : 'justify-end'}`}>
+          <button onClick={() => setShowSettings(true)} className="p-3 text-slate-500 hover:text-white hover:bg-slate-800 rounded-2xl transition-all">
+            <Settings size={22} />
+          </button>
+        </div>
+
       </aside>
 
       {/* --- MAIN CHAT AREA --- */}
@@ -756,7 +826,7 @@ export default function App() {
     await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'profiles', user.uid), { bio: user.bio }, { merge: true });
     setSaveSuccess(prev => ({ ...prev, profile: true }));
 }} className={`w-full py-4 rounded-2xl font-bold transition-all ${saveSuccess.profile ? 'bg-green-600 text-white' : 'bg-slate-800 hover:bg-indigo-600'}`}>
-    {saveSuccess.profile ? 'Done!' : 'Save Changes'}
+    {saveSuccess.profile ? 'Done' : 'Save Changes'}
 </button>
 
               </div>
@@ -795,13 +865,13 @@ export default function App() {
             </div>
             <button onClick={saveProfilePhoto} className={`w-full py-4 rounded-2xl font-bold flex items-center justify-center gap-2 transition-all ${saveSuccess.photo ? 'bg-green-600' : 'bg-indigo-600'}`}>
     {saveSuccess.photo ? <CheckCheck size={22} /> : <Check size={22} />} 
-    {saveSuccess.photo ? 'Done!' : 'Apply Photo'}
+    {saveSuccess.photo ? 'Done' : 'Apply Photo'}
 </button>
 
           </div>
         </Modal>
       )}
-
+  <SettingsDrawer />
       <style>{`
         :root { --tw-filter-grayscale: grayscale(1); --tw-filter-sepia: sepia(0.8) contrast(1.2); --tw-filter-invert: invert(0.9); }
         .filter-grayscale { filter: var(--tw-filter-grayscale); } .filter-sepia { filter: var(--tw-filter-sepia); } .filter-invert { filter: var(--tw-filter-invert); }
